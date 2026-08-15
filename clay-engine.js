@@ -1,7 +1,7 @@
 /**
  * =========================================================================
- *  ClayEngine 3D - Pro Procedural Modeling & Animation Suite
- *  Versão: 3.0.0 Pro (Anatomy, Modifiers, Auto-Rig, Built-in Anim & VFX)
+ *  ClayEngine 3D - Pro Procedural Modeling, Texturing & Animation Suite
+ *  Versão: 3.5.0 (SDF, Anatomy, Auto-Rig, Procedural Textures & Materials)
  *  Autor: cavalomascaku-ui
  * =========================================================================
  */
@@ -38,16 +38,13 @@
       return Math.max(a, b) + h * h * k * 0.25;
     },
     onion(d, thickness = 0.02) {
-      return Math.abs(d) - thickness; // Transforma qualquer forma sólida em casca oca
+      return Math.abs(d) - thickness;
     },
     length3(x, y, z) { return Math.hypot(x, y, z); },
     length2(x, y) { return Math.hypot(x, y); },
     clamp(v, min = 0, max = 1) { return Math.max(min, Math.min(max, v)); },
 
-    // Primitivas Base
-    sphere(x, y, z, r) {
-      return this.length3(x, y, z) - r;
-    },
+    sphere(x, y, z, r) { return this.length3(x, y, z) - r; },
     ellipsoid(x, y, z, rx, ry, rz) {
       const k0 = this.length3(x / rx, y / ry, z / rz);
       const k1 = this.length3(x / (rx * rx), y / (ry * ry), z / (rz * rz));
@@ -73,48 +70,32 @@
       return this.length3(Math.max(qx, 0.0), Math.max(qy, 0.0), Math.max(qz, 0.0)) + Math.min(Math.max(qx, Math.max(qy, qz)), 0.0);
     },
     cylinder(x, y, z, h, r) {
-      const dX = this.length2(x, z) - r;
-      const dY = Math.abs(y) - h;
+      const dX = this.length2(x, z) - r, dY = Math.abs(y) - h;
       return Math.min(Math.max(dX, dY), 0.0) + this.length2(Math.max(dX, 0.0), Math.max(dY, 0.0));
     },
     torus(x, y, z, tx, ty) {
       const qx = this.length2(x, z) - tx;
       return this.length2(qx, y) - ty;
     },
-    hexPrism(x, y, z, h, r) {
-      const kx = -0.8660254, ky = 0.5, kz = 0.57735;
-      let px = Math.abs(x), pz = Math.abs(z);
-      const dot = 2.0 * Math.min(kx * px + ky * pz, 0.0);
-      px -= dot * kx; pz -= dot * ky;
-      const d1 = this.length2(px - Math.max(-kz * r, Math.min(kz * r, px)), pz - r) * Math.sign(pz - r);
-      const d2 = Math.abs(y) - h;
-      return Math.min(Math.max(d1, d2), 0.0) + this.length2(Math.max(d1, 0.0), Math.max(d2, 0.0));
-    },
-
-    // Espelho de Simetria X
     symX(x) { return Math.abs(x); }
   };
 
   // -----------------------------------------------------------------------
-  // 2. MODIFICADORES ORGÂNICOS DE ESPAÇO (ClayEngine.Modifiers)
+  // 2. MODIFICADORES ORGÂNICOS (ClayEngine.Modifiers)
   // -----------------------------------------------------------------------
   const Modifiers = {
-    // Ruído de Digitais / Textura de Massinha
     clayNoise(x, y, z, freq = 28.0, amp = 0.006) {
       return (Math.sin(x * freq) * Math.sin(y * freq) * Math.sin(z * freq)) * amp;
     },
-    // Torção em Y (Twist)
     twistY(x, y, z, strength = 1.0) {
       const angle = y * strength;
       const s = Math.sin(angle), c = Math.cos(angle);
       return { x: c * x - s * z, y: y, z: s * x + c * z };
     },
-    // Dobra / Curvatura em X
     bendX(x, y, z, curve = 0.5) {
       const c = Math.cos(curve * y), s = Math.sin(curve * y);
       return { x: c * x - s * y, y: s * x + c * y, z: z };
     },
-    // Repetição Radial em Círculo (Clona garras, dentes, espinhos, pétalas)
     radialRepeat(x, z, count = 6) {
       const angle = (Math.PI * 2) / count;
       let a = Math.atan2(z, x) + angle * 0.5;
@@ -125,36 +106,27 @@
   };
 
   // -----------------------------------------------------------------------
-  // 3. ANATOMIA INTELIGENTE & FEATURING (ClayEngine.Anatomy)
+  // 3. ANATOMIA INTELIGENTE (ClayEngine.Anatomy)
   // -----------------------------------------------------------------------
   const Anatomy = {
-    // Olho 3D de Massinha Completo (Casca externa, cavidade e pálpebra)
     eye3D(x, y, z, px, py, pz, radius = 0.045) {
       const dx = x - px, dy = y - py, dz = z - pz;
       const eyeBall = MathOps.sphere(dx, dy, dz, radius);
       const upperLid = MathOps.torus(dx, dy - radius * 0.25, dz - 0.005, radius * 0.95, radius * 0.22);
       return MathOps.smin(eyeBall, upperLid, radius * 0.25);
     },
-
-    // Boca em Arco com Curvatura que segue o queixo
     mouth3D(x, y, z, px, py, pz, width = 0.06, curve = 0.25) {
       const dx = x - px, dy = y - py, dz = z - pz;
       return MathOps.torus(dx, dy + (dx * dx) * curve, dz, width, 0.008);
     },
-
-    // Membro de 2 Articulações (Ombro/Coxa -> Cotovelo/Joelho -> Mão/Pé)
     limb3D(x, y, z, ax, ay, az, jx, jy, jz, bx, by, bz, r1 = 0.065, r2 = 0.05) {
       const upper = MathOps.capsule(x, y, z, ax, ay, az, jx, jy, jz, r1);
       const lower = MathOps.capsule(x, y, z, jx, jy, jz, bx, by, bz, r2);
       const joint = MathOps.sphere(x - jx, y - jy, z - jz, r1 * 1.06);
       return MathOps.smin(MathOps.smin(upper, lower, 0.03), joint, 0.03);
     },
-
-    // Garra ou Chifre Curvado
     claw3D(x, y, z, ax, ay, az, bx, by, bz, curveX = 0, curveZ = 0.05, r1 = 0.06, r2 = 0.005) {
-      const mx = (ax + bx) * 0.5 + curveX;
-      const my = (ay + by) * 0.5;
-      const mz = (az + bz) * 0.5 + curveZ;
+      const mx = (ax + bx) * 0.5 + curveX, my = (ay + by) * 0.5, mz = (az + bz) * 0.5 + curveZ;
       const seg1 = MathOps.roundCone(x, y, z, ax, ay, az, mx, my, mz, r1, (r1 + r2) * 0.5);
       const seg2 = MathOps.roundCone(x, y, z, mx, my, mz, bx, by, bz, (r1 + r2) * 0.5, r2);
       return MathOps.smin(seg1, seg2, 0.03);
@@ -162,7 +134,205 @@
   };
 
   // -----------------------------------------------------------------------
-  // 4. PALETAS & MATERIAIS PROCEDURAIS (ClayEngine.Colors)
+  // 4. GERADOR DE TEXTURAS PROCEDURAIS (ClayEngine.Textures)
+  // -----------------------------------------------------------------------
+  const Textures = {
+    // Rosto de Anime Vetorial Customizável
+    animeFace(options = {}) {
+      const {
+        irisColor = '#1d4ed8',
+        irisGlow = '#38bdf8',
+        expression = 'determined', // 'determined' | 'angry' | 'happy' | 'berserker'
+        blush = true,
+        eyeSpacing = 192
+      } = options;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, 512, 512);
+
+      function drawEye(cx, cy, isLeft) {
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // Esclera
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 46, 62, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        // Íris em Degradê
+        const grad = ctx.createLinearGradient(0, -45, 0, 45);
+        if (expression === 'berserker') {
+          grad.addColorStop(0, '#4a0000');
+          grad.addColorStop(0.5, '#dc2626');
+          grad.addColorStop(1, '#ff8800');
+        } else {
+          grad.addColorStop(0, '#0a1936');
+          grad.addColorStop(0.5, irisColor);
+          grad.addColorStop(1, irisGlow);
+        }
+        ctx.beginPath();
+        ctx.ellipse(0, 2, 34, 50, 0, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Pupila
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 15, 24, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#050a14';
+        ctx.fill();
+
+        // Brilhos de Luz Anime
+        ctx.beginPath();
+        ctx.arc(isLeft ? 12 : 8, -16, 12, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(isLeft ? -10 : -8, 14, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Cílios Superiores
+        ctx.beginPath();
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = '#18120c';
+        ctx.arc(0, -10, 50, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
+
+        // Sobrancelha
+        ctx.beginPath();
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = expression === 'berserker' ? '#4a0a0a' : '#22140c';
+        if (expression === 'angry' || expression === 'berserker') {
+          ctx.moveTo(isLeft ? -50 : 50, -65);
+          ctx.lineTo(isLeft ? 50 : -50, -100);
+        } else if (expression === 'happy') {
+          ctx.arc(0, -75, 45, Math.PI * 1.25, Math.PI * 1.75);
+        } else {
+          ctx.moveTo(isLeft ? -45 : 45, -75);
+          ctx.lineTo(isLeft ? 45 : -45, -92);
+        }
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      const centerX = 256;
+      drawEye(centerX - eyeSpacing * 0.5, 220, true);
+      drawEye(centerX + eyeSpacing * 0.5, 220, false);
+
+      if (blush && expression !== 'berserker') {
+        ctx.fillStyle = 'rgba(255, 100, 120, 0.28)';
+        ctx.beginPath(); ctx.ellipse(centerX - eyeSpacing * 0.6, 295, 36, 16, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(centerX + eyeSpacing * 0.6, 295, 36, 16, 0, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Boca
+      ctx.beginPath();
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = expression === 'berserker' ? '#2a0505' : '#5a2518';
+      if (expression === 'berserker') {
+        // Boca aberta com presas
+        ctx.fillStyle = '#4a0808';
+        ctx.ellipse(centerX, 330, 38, 24, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (expression === 'happy') {
+        ctx.arc(centerX, 305, 36, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+      } else {
+        ctx.arc(centerX, 310, 30, Math.PI * 0.15, Math.PI * 0.75);
+        ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.ClampToEdgeWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      return tex;
+    },
+
+    // Textura de Listras (Canudos, roupas mágicas, doces)
+    stripes(color1 = '#ffffff', color2 = '#dc2626', count = 10) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      const step = canvas.height / count;
+      for (let i = 0; i < count; i++) {
+        ctx.fillStyle = i % 2 === 0 ? color1 : color2;
+        ctx.fillRect(0, i * step, canvas.width, step);
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    },
+
+    // Runas Mágicas / Kanjis Japoneses
+    runes(symbols = ["滅", "死", "魂", "血"], glowColor = "#ff2244") {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = "bold 95px 'Yu Gothic', serif";
+      const spacing = canvas.height / (symbols.length + 1);
+
+      symbols.forEach((char, idx) => {
+        const y = spacing * (idx + 1);
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = 25;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(char, canvas.width / 2, y);
+      });
+      return new THREE.CanvasTexture(canvas);
+    }
+  };
+
+  // -----------------------------------------------------------------------
+  // 5. MATERIAIS PROCEDURAIS DE JOGO (ClayEngine.Materials)
+  // -----------------------------------------------------------------------
+  const Materials = {
+    clay(options = {}) {
+      return new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: options.roughness || 0.65,
+        metalness: options.metalness || 0.05,
+        ...options
+      });
+    },
+    glowing(color = 0xff3300, intensity = 1.5) {
+      return new THREE.MeshStandardMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: intensity,
+        roughness: 0.1
+      });
+    },
+    liquid(color = 0xffffff, opacity = 0.9) {
+      return new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: 0.2,
+        metalness: 0.1,
+        transparent: true,
+        opacity: opacity
+      });
+    },
+    metal(color = 0xd8e4f0, roughness = 0.25, metalness = 0.7) {
+      return new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: roughness,
+        metalness: metalness
+      });
+    }
+  };
+
+  // -----------------------------------------------------------------------
+  // 6. PALETAS DE CORES AUXILIARES (ClayEngine.Colors)
   // -----------------------------------------------------------------------
   const Colors = {
     skin(ao = 1.0) { return [0.96 * ao, 0.78 * ao, 0.64 * ao]; },
@@ -171,12 +341,11 @@
     leatherBrown(ao = 1.0) { return [0.42 * ao, 0.26 * ao, 0.15 * ao]; },
     gold(ao = 1.0) { return [0.95 * ao, 0.78 * ao, 0.22 * ao]; },
     steel(ao = 1.0) { return [0.85 * ao, 0.88 * ao, 0.94 * ao]; },
-    darkHair(ao = 1.0) { return [0.22 * ao, 0.14 * ao, 0.10 * ao]; },
     calcAO(ny = 1.0) { return Math.max(0.45, Math.min(1.0, 0.7 + 0.3 * ny)); }
   };
 
   // -----------------------------------------------------------------------
-  // 5. EXTRATOR DE SUPERFÍCIE LISA (SURFACE NETS COM GRADIENTE)
+  // 7. EXTRATOR SURFACE NETS & RIGGING
   // -----------------------------------------------------------------------
   const CORNERS = [
     [0,0,0], [1,0,0], [0,1,0], [1,1,0],
@@ -191,10 +360,7 @@
   function extractMesh(sdfFunc, colorFunc, bounds, dims = [46, 48, 46]) {
     const [nx, ny, nz] = dims;
     const { minX, maxX, minY, maxY, minZ, maxZ } = bounds;
-    
-    const stepX = (maxX - minX) / (nx - 1);
-    const stepY = (maxY - minY) / (ny - 1);
-    const stepZ = (maxZ - minZ) / (nz - 1);
+    const stepX = (maxX - minX) / (nx - 1), stepY = (maxY - minY) / (ny - 1), stepZ = (maxZ - minZ) / (nz - 1);
 
     const grid = new Float32Array(nx * ny * nz);
     let ptr = 0;
@@ -202,9 +368,7 @@
       const z = minZ + k * stepZ;
       for (let j = 0; j < ny; j++) {
         const y = minY + j * stepY;
-        for (let i = 0; i < nx; i++) {
-          grid[ptr++] = sdfFunc(minX + i * stepX, y, z);
-        }
+        for (let i = 0; i < nx; i++) grid[ptr++] = sdfFunc(minX + i * stepX, y, z);
       }
     }
 
@@ -226,13 +390,11 @@
         for (let i = 0; i < nx - 1; i++) {
           const cornerValues = new Float32Array(8);
           let mask = 0;
-
           for (let c = 0; c < 8; c++) {
             const val = grid[(i + CORNERS[c][0]) + nx * ((j + CORNERS[c][1]) + ny * (k + CORNERS[c][2]))];
             cornerValues[c] = val;
             if (val < 0.0) mask |= (1 << c);
           }
-
           if (mask === 0 || mask === 255) continue;
 
           let sumX = 0, sumY = 0, sumZ = 0, crossings = 0;
@@ -247,20 +409,16 @@
               crossings++;
             }
           }
-
           const vx = sumX / crossings, vy = sumY / crossings, vz = sumZ / crossings;
           vertices.push(vx, vy, vz);
-
           const [nxV, nyV, nzV] = getNormal(vx, vy, vz);
           normals.push(nxV, nyV, nzV);
-
           if (colorFunc) {
             const [cr, cg, cb] = colorFunc(vx, vy, vz, nxV, nyV, nzV);
             colors.push(cr, cg, cb);
           } else {
             colors.push(0.5, 0.7, 0.3);
           }
-
           cellMap[i + (nx - 1) * (j + (ny - 1) * k)] = vCount++;
         }
       }
@@ -270,37 +428,23 @@
     for (let k = 1; k < nz - 1; k++) {
       for (let j = 1; j < ny - 1; j++) {
         for (let i = 1; i < nx - 1; i++) {
-          const idx = i + nx * (j + ny * k);
-          const val = grid[idx];
-
+          const idx = i + nx * (j + ny * k), val = grid[idx];
           if ((val < 0) !== (grid[idx + 1] < 0)) {
-            const c0 = cellMap[i + sx * (j + sy * k)];
-            const c1 = cellMap[i + sx * ((j - 1) + sy * k)];
-            const c2 = cellMap[i + sx * ((j - 1) + sy * (k - 1))];
-            const c3 = cellMap[i + sx * (j + sy * (k - 1))];
+            const c0 = cellMap[i + sx * (j + sy * k)], c1 = cellMap[i + sx * ((j - 1) + sy * k)], c2 = cellMap[i + sx * ((j - 1) + sy * (k - 1))], c3 = cellMap[i + sx * (j + sy * (k - 1))];
             if (c0 !== -1 && c1 !== -1 && c2 !== -1 && c3 !== -1) {
-              if (val < 0) indices.push(c0, c1, c2, c0, c2, c3);
-              else indices.push(c0, c2, c1, c0, c3, c2);
+              if (val < 0) indices.push(c0, c1, c2, c0, c2, c3); else indices.push(c0, c2, c1, c0, c3, c2);
             }
           }
           if ((val < 0) !== (grid[idx + nx] < 0)) {
-            const c0 = cellMap[i + sx * (j + sy * k)];
-            const c1 = cellMap[(i - 1) + sx * (j + sy * k)];
-            const c2 = cellMap[(i - 1) + sx * (j + sy * (k - 1))];
-            const c3 = cellMap[i + sx * (j + sy * (k - 1))];
+            const c0 = cellMap[i + sx * (j + sy * k)], c1 = cellMap[(i - 1) + sx * (j + sy * k)], c2 = cellMap[(i - 1) + sx * (j + sy * (k - 1))], c3 = cellMap[i + sx * (j + sy * (k - 1))];
             if (c0 !== -1 && c1 !== -1 && c2 !== -1 && c3 !== -1) {
-              if (val < 0) indices.push(c0, c2, c1, c0, c3, c2);
-              else indices.push(c0, c1, c2, c0, c2, c3);
+              if (val < 0) indices.push(c0, c2, c1, c0, c3, c2); else indices.push(c0, c1, c2, c0, c2, c3);
             }
           }
           if ((val < 0) !== (grid[idx + nx * ny] < 0)) {
-            const c0 = cellMap[i + sx * (j + sy * k)];
-            const c1 = cellMap[(i - 1) + sx * (j + sy * k)];
-            const c2 = cellMap[(i - 1) + sx * ((j - 1) + sy * k)];
-            const c3 = cellMap[i + sx * ((j - 1) + sy * k)];
+            const c0 = cellMap[i + sx * (j + sy * k)], c1 = cellMap[(i - 1) + sx * (j + sy * k)], c2 = cellMap[(i - 1) + sx * ((j - 1) + sy * k)], c3 = cellMap[i + sx * ((j - 1) + sy * k)];
             if (c0 !== -1 && c1 !== -1 && c2 !== -1 && c3 !== -1) {
-              if (val < 0) indices.push(c0, c1, c2, c0, c2, c3);
-              else indices.push(c0, c2, c1, c0, c3, c2);
+              if (val < 0) indices.push(c0, c1, c2, c0, c2, c3); else indices.push(c0, c2, c1, c0, c3, c2);
             }
           }
         }
@@ -315,16 +459,12 @@
     return geo;
   }
 
-  // -----------------------------------------------------------------------
-  // 6. AUTO-RIGGING BÍPEDE AUTOMÁTICO (ClayEngine.Rig)
-  // -----------------------------------------------------------------------
   const Rig = {
     createBiped(meshGeometry) {
       const bones = [];
       function addBone(name, x, y, z, parent = null) {
         const b = new THREE.Bone();
-        b.name = name;
-        b.position.set(x, y, z);
+        b.name = name; b.position.set(x, y, z);
         if (parent) parent.add(b);
         bones.push(b);
         return b;
@@ -333,40 +473,30 @@
       const root     = addBone("Bone_Root", 0, 0.55, 0);
       const spine    = addBone("Bone_Spine", 0, 0.35, 0, root);
       const head     = addBone("Bone_Head", 0, 0.35, 0.02, spine);
-
       const lArm     = addBone("Bone_Arm_L", -0.19, 0.05, 0.0, spine);
       const lForeArm = addBone("Bone_ForeArm_L", -0.08, -0.22, 0.02, lArm);
       const lHand    = addBone("Bone_Hand_L", -0.04, -0.24, 0.02, lForeArm);
-
       const rArm     = addBone("Bone_Arm_R", 0.19, 0.05, 0.0, spine);
       const rForeArm = addBone("Bone_ForeArm_R", 0.08, -0.22, 0.02, rArm);
       const rHand    = addBone("Bone_Hand_R", 0.04, -0.24, 0.02, rForeArm);
-
       const lThigh   = addBone("Bone_Thigh_L", -0.09, -0.05, 0.0, root);
       const lShin    = addBone("Bone_Shin_L", 0.0, -0.30, 0.02, lThigh);
-
       const rThigh   = addBone("Bone_Thigh_R", 0.09, -0.05, 0.0, root);
       const rShin    = addBone("Bone_Shin_R", 0.0, -0.30, 0.02, rThigh);
 
-      // Distribuição Matemática Suave de Pesos
       const pos = meshGeometry.attributes.position;
-      const skinIndices = [];
-      const skinWeights = [];
+      const skinIndices = [], skinWeights = [];
 
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i), y = pos.getY(i);
         let b1 = 0, w1 = 1.0, b2 = 0, w2 = 0.0;
-
         if (y > 1.14) { b1 = 2; w1 = 1.0; }
         else if (x < -0.18 && y > 0.40 && y <= 1.12) {
-          if (y < 0.58) { b1 = 5; w1 = 1.0; }
-          else { b1 = 3; b2 = 4; w1 = 0.5; w2 = 0.5; }
+          if (y < 0.58) { b1 = 5; w1 = 1.0; } else { b1 = 3; b2 = 4; w1 = 0.5; w2 = 0.5; }
         } else if (x > 0.18 && y > 0.40 && y <= 1.12) {
-          if (y < 0.58) { b1 = 8; w1 = 1.0; }
-          else { b1 = 6; b2 = 7; w1 = 0.5; w2 = 0.5; }
+          if (y < 0.58) { b1 = 8; w1 = 1.0; } else { b1 = 6; b2 = 7; w1 = 0.5; w2 = 0.5; }
         } else if (y <= 0.48) {
-          const isLeft = x < 0;
-          b1 = isLeft ? 9 : 11; b2 = isLeft ? 10 : 12;
+          const isLeft = x < 0; b1 = isLeft ? 9 : 11; b2 = isLeft ? 10 : 12;
           const tLeg = Math.max(0, Math.min(1, (y - 0.10) / 0.28));
           w1 = tLeg; w2 = 1.0 - tLeg;
         } else {
@@ -374,17 +504,13 @@
           const smoothT = tTorso * tTorso * (3 - 2 * tTorso);
           b1 = 1; w1 = smoothT; b2 = 0; w2 = 1.0 - smoothT;
         }
-        skinIndices.push(b1, b2, 0, 0);
-        skinWeights.push(w1, w2, 0, 0);
+        skinIndices.push(b1, b2, 0, 0); skinWeights.push(w1, w2, 0, 0);
       }
 
       meshGeometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
       meshGeometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
 
-      const skinnedMesh = new THREE.SkinnedMesh(
-        meshGeometry,
-        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65, skinning: true })
-      );
+      const skinnedMesh = new THREE.SkinnedMesh(meshGeometry, Materials.clay({ skinning: true }));
       const skeleton = new THREE.Skeleton(bones);
       skinnedMesh.add(root);
       skinnedMesh.bind(skeleton);
@@ -397,11 +523,7 @@
     }
   };
 
-  // -----------------------------------------------------------------------
-  // 7. CINEMÁTICA & ANIMAÇÕES EMBUTIDAS (ClayEngine.Anim)
-  // -----------------------------------------------------------------------
   const Anim = {
-    // Caminhada Heroica Natural
     bipedWalk(bones, time, speed = 4.6) {
       const t = time * speed;
       bones.root.position.set(0, 0.55 + Math.abs(Math.sin(t)) * 0.02, 0);
@@ -418,8 +540,6 @@
       bones.rForeArm.rotation.set(-0.30, 0.0, 0);
       bones.rHand.rotation.set(0.15, 0, 0);
     },
-
-    // Corrida Veloz com Inclinação Atlética
     bipedRun(bones, time, speed = 7.5) {
       const t = time * speed;
       bones.root.position.set(0, 0.53 + Math.abs(Math.sin(t)) * 0.045, 0);
@@ -438,26 +558,15 @@
     }
   };
 
-  // -----------------------------------------------------------------------
-  // 8. EXPORTADOR .OBJ
-  // -----------------------------------------------------------------------
   function exportOBJ(geometry, filename = "model.obj") {
-    const pos = geometry.attributes.position;
-    const norm = geometry.attributes.normal;
-    const col = geometry.attributes.color;
-    const index = geometry.index;
-    
+    const pos = geometry.attributes.position, norm = geometry.attributes.normal, col = geometry.attributes.color, index = geometry.index;
     let obj = "# ClayEngine 3D Pro Exported Mesh\n";
     for (let i = 0; i < pos.count; i++) {
-      const r = col ? col.getX(i).toFixed(3) : "0.5";
-      const g = col ? col.getY(i).toFixed(3) : "0.5";
-      const b = col ? col.getZ(i).toFixed(3) : "0.5";
+      const r = col ? col.getX(i).toFixed(3) : "0.5", g = col ? col.getY(i).toFixed(3) : "0.5", b = col ? col.getZ(i).toFixed(3) : "0.5";
       obj += `v ${pos.getX(i).toFixed(4)} ${pos.getY(i).toFixed(4)} ${pos.getZ(i).toFixed(4)} ${r} ${g} ${b}\n`;
     }
     if (norm) {
-      for (let i = 0; i < norm.count; i++) {
-        obj += `vn ${norm.getX(i).toFixed(4)} ${norm.getY(i).toFixed(4)} ${norm.getZ(i).toFixed(4)}\n`;
-      }
+      for (let i = 0; i < norm.count; i++) obj += `vn ${norm.getX(i).toFixed(4)} ${norm.getY(i).toFixed(4)} ${norm.getZ(i).toFixed(4)}\n`;
     }
     if (index) {
       for (let i = 0; i < index.count; i += 3) {
@@ -465,7 +574,6 @@
         obj += `f ${a}//${a} ${b}//${b} ${c}//${c}\n`;
       }
     }
-
     const blob = new Blob([obj], { type: "text/plain" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -474,23 +582,22 @@
   }
 
   // -----------------------------------------------------------------------
-  // 9. API PÚBLICA DA CLAYENGINE v3.0.0 PRO
+  // 8. API PÚBLICA DA CLAYENGINE v3.5.0
   // -----------------------------------------------------------------------
   return {
-    version: "3.0.0 Pro",
+    version: "3.5.0",
     Math: MathOps,
     Modifiers: Modifiers,
     Anatomy: Anatomy,
+    Textures: Textures,
+    Materials: Materials,
     Colors: Colors,
     Rig: Rig,
     Anim: Anim,
 
-    // Criação de Geometria Estática
     createMesh(sdfFunc, colorFunc, bounds, resolution = [46, 48, 46]) {
       return extractMesh(sdfFunc, colorFunc, bounds, resolution);
     },
-
-    // Exportador
     exportOBJ(geometry, filename) {
       exportOBJ(geometry, filename);
     }
