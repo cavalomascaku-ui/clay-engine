@@ -1,7 +1,8 @@
 /**
  * =========================================================================
- *  ClayEngine 3D - Micro-Framework de Modelagem & Escultura Orgânica
- *  Versão: 2.0.0 (Anatomy, Modifiers, Auto-Rigging & GLB Export)
+ *  ClayEngine 3D - Pro Procedural Modeling & Animation Suite
+ *  Versão: 3.0.0 Pro (Anatomy, Modifiers, Auto-Rig, Built-in Anim & VFX)
+ *  Autor: cavalomascaku-ui
  * =========================================================================
  */
 
@@ -24,16 +25,24 @@
   // 1. MATEMÁTICA & OPERADORES VOLUMÉTRICOS (SDF)
   // -----------------------------------------------------------------------
   const MathOps = {
-    smin(a, b, k = 0.2) {
+    smin(a, b, k = 0.15) {
       const h = Math.max(k - Math.abs(a - b), 0.0) / k;
       return Math.min(a, b) - h * h * k * 0.25;
     },
-    smax(a, b, k = 0.1) {
+    smax(a, b, k = 0.05) {
       const h = Math.max(k - Math.abs(-a - b), 0.0) / k;
       return Math.max(-a, b) + h * h * k * 0.25;
     },
+    sintersect(a, b, k = 0.05) {
+      const h = Math.max(k - Math.abs(a - b), 0.0) / k;
+      return Math.max(a, b) + h * h * k * 0.25;
+    },
+    onion(d, thickness = 0.02) {
+      return Math.abs(d) - thickness; // Transforma qualquer forma sólida em casca oca
+    },
     length3(x, y, z) { return Math.hypot(x, y, z); },
     length2(x, y) { return Math.hypot(x, y); },
+    clamp(v, min = 0, max = 1) { return Math.max(min, Math.min(max, v)); },
 
     // Primitivas Base
     sphere(x, y, z, r) {
@@ -47,7 +56,7 @@
     capsule(px, py, pz, ax, ay, az, bx, by, bz, r) {
       const pax = px - ax, pay = py - ay, paz = pz - az;
       const bax = bx - ax, bay = by - ay, baz = bz - az;
-      const h = Math.max(0.0, Math.min(1.0, (pax * bax + pay * bay + paz * baz) / (bax * bax + bay * bay + baz * baz)));
+      const h = this.clamp((pax * bax + pay * bay + paz * baz) / (bax * bax + bay * bay + baz * baz));
       return this.length3(pax - bax * h, pay - bay * h, paz - baz * h) - r;
     },
     roundCone(px, py, pz, ax, ay, az, bx, by, bz, r1, r2) {
@@ -55,7 +64,7 @@
       const l2 = bax * bax + bay * bay + baz * baz;
       const pax = px - ax, pay = py - ay, paz = pz - az;
       const y = (pax * bax + pay * bay + paz * baz) / l2;
-      const h = Math.max(0.0, Math.min(1.0, y));
+      const h = this.clamp(y);
       const r = r1 * (1.0 - h) + r2 * h;
       return this.length3(pax - bax * h, pay - bay * h, paz - baz * h) - r;
     },
@@ -63,9 +72,23 @@
       const qx = Math.abs(x) - bx, qy = Math.abs(y) - by, qz = Math.abs(z) - bz;
       return this.length3(Math.max(qx, 0.0), Math.max(qy, 0.0), Math.max(qz, 0.0)) + Math.min(Math.max(qx, Math.max(qy, qz)), 0.0);
     },
+    cylinder(x, y, z, h, r) {
+      const dX = this.length2(x, z) - r;
+      const dY = Math.abs(y) - h;
+      return Math.min(Math.max(dX, dY), 0.0) + this.length2(Math.max(dX, 0.0), Math.max(dY, 0.0));
+    },
     torus(x, y, z, tx, ty) {
       const qx = this.length2(x, z) - tx;
       return this.length2(qx, y) - ty;
+    },
+    hexPrism(x, y, z, h, r) {
+      const kx = -0.8660254, ky = 0.5, kz = 0.57735;
+      let px = Math.abs(x), pz = Math.abs(z);
+      const dot = 2.0 * Math.min(kx * px + ky * pz, 0.0);
+      px -= dot * kx; pz -= dot * ky;
+      const d1 = this.length2(px - Math.max(-kz * r, Math.min(kz * r, px)), pz - r) * Math.sign(pz - r);
+      const d2 = Math.abs(y) - h;
+      return Math.min(Math.max(d1, d2), 0.0) + this.length2(Math.max(d1, 0.0), Math.max(d2, 0.0));
     },
 
     // Espelho de Simetria X
@@ -73,55 +96,87 @@
   };
 
   // -----------------------------------------------------------------------
-  // 2. FORMAS COMPLEXAS & ANATOMIA AUTOMÁTICA (ClayEngine.Shapes)
+  // 2. MODIFICADORES ORGÂNICOS DE ESPAÇO (ClayEngine.Modifiers)
   // -----------------------------------------------------------------------
-  const Shapes = {
-    // Olho 3D de Massinha com Órbita e Pálpebra na Casca Exata
-    eye(x, y, z, posX, posY, posZ, radius = 0.05) {
-      const dx = x - posX, dy = y - posY, dz = z - posZ;
+  const Modifiers = {
+    // Ruído de Digitais / Textura de Massinha
+    clayNoise(x, y, z, freq = 28.0, amp = 0.006) {
+      return (Math.sin(x * freq) * Math.sin(y * freq) * Math.sin(z * freq)) * amp;
+    },
+    // Torção em Y (Twist)
+    twistY(x, y, z, strength = 1.0) {
+      const angle = y * strength;
+      const s = Math.sin(angle), c = Math.cos(angle);
+      return { x: c * x - s * z, y: y, z: s * x + c * z };
+    },
+    // Dobra / Curvatura em X
+    bendX(x, y, z, curve = 0.5) {
+      const c = Math.cos(curve * y), s = Math.sin(curve * y);
+      return { x: c * x - s * y, y: s * x + c * y, z: z };
+    },
+    // Repetição Radial em Círculo (Clona garras, dentes, espinhos, pétalas)
+    radialRepeat(x, z, count = 6) {
+      const angle = (Math.PI * 2) / count;
+      let a = Math.atan2(z, x) + angle * 0.5;
+      const r = Math.hypot(x, z);
+      a = ((a % angle) + angle) % angle - angle * 0.5;
+      return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+    }
+  };
+
+  // -----------------------------------------------------------------------
+  // 3. ANATOMIA INTELIGENTE & FEATURING (ClayEngine.Anatomy)
+  // -----------------------------------------------------------------------
+  const Anatomy = {
+    // Olho 3D de Massinha Completo (Casca externa, cavidade e pálpebra)
+    eye3D(x, y, z, px, py, pz, radius = 0.045) {
+      const dx = x - px, dy = y - py, dz = z - pz;
       const eyeBall = MathOps.sphere(dx, dy, dz, radius);
-      // Pálpebra superior curva
-      const lid = MathOps.torus(dx, dy - radius * 0.2, dz, radius * 0.95, radius * 0.25);
-      return MathOps.smin(eyeBall, lid, radius * 0.3);
+      const upperLid = MathOps.torus(dx, dy - radius * 0.25, dz - 0.005, radius * 0.95, radius * 0.22);
+      return MathOps.smin(eyeBall, upperLid, radius * 0.25);
     },
 
-    // Membro de 2 Articulações (Braço ou Perna)
-    limb(x, y, z, ax, ay, az, jx, jy, jz, bx, by, bz, r1 = 0.08, r2 = 0.06) {
+    // Boca em Arco com Curvatura que segue o queixo
+    mouth3D(x, y, z, px, py, pz, width = 0.06, curve = 0.25) {
+      const dx = x - px, dy = y - py, dz = z - pz;
+      return MathOps.torus(dx, dy + (dx * dx) * curve, dz, width, 0.008);
+    },
+
+    // Membro de 2 Articulações (Ombro/Coxa -> Cotovelo/Joelho -> Mão/Pé)
+    limb3D(x, y, z, ax, ay, az, jx, jy, jz, bx, by, bz, r1 = 0.065, r2 = 0.05) {
       const upper = MathOps.capsule(x, y, z, ax, ay, az, jx, jy, jz, r1);
       const lower = MathOps.capsule(x, y, z, jx, jy, jz, bx, by, bz, r2);
-      const joint = MathOps.sphere(x - jx, y - jy, z - jz, r1 * 1.05); // Volume do joelho/cotovelo
-      return MathOps.smin(MathOps.smin(upper, lower, 0.04), joint, 0.04);
+      const joint = MathOps.sphere(x - jx, y - jy, z - jz, r1 * 1.06);
+      return MathOps.smin(MathOps.smin(upper, lower, 0.03), joint, 0.03);
     },
 
-    // Chifre ou Garra Curvada
-    curvedSpike(x, y, z, ax, ay, az, bx, by, bz, curveX, curveZ, r1 = 0.08, r2 = 0.01) {
+    // Garra ou Chifre Curvado
+    claw3D(x, y, z, ax, ay, az, bx, by, bz, curveX = 0, curveZ = 0.05, r1 = 0.06, r2 = 0.005) {
       const mx = (ax + bx) * 0.5 + curveX;
       const my = (ay + by) * 0.5;
       const mz = (az + bz) * 0.5 + curveZ;
       const seg1 = MathOps.roundCone(x, y, z, ax, ay, az, mx, my, mz, r1, (r1 + r2) * 0.5);
       const seg2 = MathOps.roundCone(x, y, z, mx, my, mz, bx, by, bz, (r1 + r2) * 0.5, r2);
-      return MathOps.smin(seg1, seg2, 0.04);
+      return MathOps.smin(seg1, seg2, 0.03);
     }
   };
 
   // -----------------------------------------------------------------------
-  // 3. MODIFICADORES ORGÂNICOS DE MASSINHA (ClayEngine.Modifiers)
+  // 4. PALETAS & MATERIAIS PROCEDURAIS (ClayEngine.Colors)
   // -----------------------------------------------------------------------
-  const Modifiers = {
-    // Ruído de Digitais / Imperfeições de Massinha
-    clayNoise(x, y, z, frequency = 25.0, amplitude = 0.008) {
-      return (Math.sin(x * frequency) * Math.sin(y * frequency) * Math.sin(z * frequency)) * amplitude;
-    },
-    // Torção de Espaço (Twist)
-    twistY(x, y, z, strength = 1.0) {
-      const angle = y * strength;
-      const s = Math.sin(angle), c = Math.cos(angle);
-      return { x: c * x - s * z, y: y, z: s * x + c * z };
-    }
+  const Colors = {
+    skin(ao = 1.0) { return [0.96 * ao, 0.78 * ao, 0.64 * ao]; },
+    heroBlue(ao = 1.0) { return [0.18 * ao, 0.44 * ao, 0.82 * ao]; },
+    crimsonRed(ao = 1.0) { return [0.88 * ao, 0.20 * ao, 0.16 * ao]; },
+    leatherBrown(ao = 1.0) { return [0.42 * ao, 0.26 * ao, 0.15 * ao]; },
+    gold(ao = 1.0) { return [0.95 * ao, 0.78 * ao, 0.22 * ao]; },
+    steel(ao = 1.0) { return [0.85 * ao, 0.88 * ao, 0.94 * ao]; },
+    darkHair(ao = 1.0) { return [0.22 * ao, 0.14 * ao, 0.10 * ao]; },
+    calcAO(ny = 1.0) { return Math.max(0.45, Math.min(1.0, 0.7 + 0.3 * ny)); }
   };
 
   // -----------------------------------------------------------------------
-  // 4. EXTRATOR DE MALHA POLIGONAL LISA (SURFACE NETS)
+  // 5. EXTRATOR DE SUPERFÍCIE LISA (SURFACE NETS COM GRADIENTE)
   // -----------------------------------------------------------------------
   const CORNERS = [
     [0,0,0], [1,0,0], [0,1,0], [1,1,0],
@@ -133,7 +188,7 @@
     [0,4], [1,5], [2,6], [3,7]
   ];
 
-  function extractMesh(sdfFunc, colorFunc, bounds, dims = [52, 52, 52]) {
+  function extractMesh(sdfFunc, colorFunc, bounds, dims = [46, 48, 46]) {
     const [nx, ny, nz] = dims;
     const { minX, maxX, minY, maxY, minZ, maxZ } = bounds;
     
@@ -183,7 +238,6 @@
           let sumX = 0, sumY = 0, sumZ = 0, crossings = 0;
           for (let e = 0; e < 12; e++) {
             const v0 = cornerValues[EDGES[e][0]], v1 = cornerValues[EDGES[e][1]];
-
             if ((v0 < 0) !== (v1 < 0)) {
               const t = v0 / (v0 - v1);
               const p0 = CORNERS[EDGES[e][0]], p1 = CORNERS[EDGES[e][1]];
@@ -262,44 +316,130 @@
   }
 
   // -----------------------------------------------------------------------
-  // 5. AUTO-RIGGING AUTOMÁTICO POR DISTÂNCIA DE CALOR (ClayEngine.createRig)
+  // 6. AUTO-RIGGING BÍPEDE AUTOMÁTICO (ClayEngine.Rig)
   // -----------------------------------------------------------------------
-  function autoSkinGeometry(geometry, boneList) {
-    const pos = geometry.attributes.position;
-    const skinIndices = [];
-    const skinWeights = [];
+  const Rig = {
+    createBiped(meshGeometry) {
+      const bones = [];
+      function addBone(name, x, y, z, parent = null) {
+        const b = new THREE.Bone();
+        b.name = name;
+        b.position.set(x, y, z);
+        if (parent) parent.add(b);
+        bones.push(b);
+        return b;
+      }
 
-    for (let i = 0; i < pos.count; i++) {
-      const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
-      
-      // Calcula a distância euclidiana para cada osso no espaço global
-      const distances = [];
-      boneList.forEach((b, idx) => {
-        const wp = new THREE.Vector3();
-        b.getWorldPosition(wp);
-        const dist = Math.hypot(vx - wp.x, vy - wp.y, vz - wp.z);
-        distances.push({ index: idx, dist: dist, weight: 1.0 / (Math.pow(dist, 2.5) + 0.001) });
-      });
+      const root     = addBone("Bone_Root", 0, 0.55, 0);
+      const spine    = addBone("Bone_Spine", 0, 0.35, 0, root);
+      const head     = addBone("Bone_Head", 0, 0.35, 0.02, spine);
 
-      // Pega os 2 ossos com maior influência
-      distances.sort((a, b) => b.weight - a.weight);
-      const b0 = distances[0], b1 = distances[1];
-      const totalWeight = b0.weight + b1.weight;
+      const lArm     = addBone("Bone_Arm_L", -0.19, 0.05, 0.0, spine);
+      const lForeArm = addBone("Bone_ForeArm_L", -0.08, -0.22, 0.02, lArm);
+      const lHand    = addBone("Bone_Hand_L", -0.04, -0.24, 0.02, lForeArm);
 
-      const w0 = b0.weight / totalWeight;
-      const w1 = b1.weight / totalWeight;
+      const rArm     = addBone("Bone_Arm_R", 0.19, 0.05, 0.0, spine);
+      const rForeArm = addBone("Bone_ForeArm_R", 0.08, -0.22, 0.02, rArm);
+      const rHand    = addBone("Bone_Hand_R", 0.04, -0.24, 0.02, rForeArm);
 
-      skinIndices.push(b0.index, b1.index, 0, 0);
-      skinWeights.push(w0, w1, 0, 0);
+      const lThigh   = addBone("Bone_Thigh_L", -0.09, -0.05, 0.0, root);
+      const lShin    = addBone("Bone_Shin_L", 0.0, -0.30, 0.02, lThigh);
+
+      const rThigh   = addBone("Bone_Thigh_R", 0.09, -0.05, 0.0, root);
+      const rShin    = addBone("Bone_Shin_R", 0.0, -0.30, 0.02, rThigh);
+
+      // Distribuição Matemática Suave de Pesos
+      const pos = meshGeometry.attributes.position;
+      const skinIndices = [];
+      const skinWeights = [];
+
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i);
+        let b1 = 0, w1 = 1.0, b2 = 0, w2 = 0.0;
+
+        if (y > 1.14) { b1 = 2; w1 = 1.0; }
+        else if (x < -0.18 && y > 0.40 && y <= 1.12) {
+          if (y < 0.58) { b1 = 5; w1 = 1.0; }
+          else { b1 = 3; b2 = 4; w1 = 0.5; w2 = 0.5; }
+        } else if (x > 0.18 && y > 0.40 && y <= 1.12) {
+          if (y < 0.58) { b1 = 8; w1 = 1.0; }
+          else { b1 = 6; b2 = 7; w1 = 0.5; w2 = 0.5; }
+        } else if (y <= 0.48) {
+          const isLeft = x < 0;
+          b1 = isLeft ? 9 : 11; b2 = isLeft ? 10 : 12;
+          const tLeg = Math.max(0, Math.min(1, (y - 0.10) / 0.28));
+          w1 = tLeg; w2 = 1.0 - tLeg;
+        } else {
+          const tTorso = Math.max(0, Math.min(1, (y - 0.48) / 0.42));
+          const smoothT = tTorso * tTorso * (3 - 2 * tTorso);
+          b1 = 1; w1 = smoothT; b2 = 0; w2 = 1.0 - smoothT;
+        }
+        skinIndices.push(b1, b2, 0, 0);
+        skinWeights.push(w1, w2, 0, 0);
+      }
+
+      meshGeometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+      meshGeometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+
+      const skinnedMesh = new THREE.SkinnedMesh(
+        meshGeometry,
+        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65, skinning: true })
+      );
+      const skeleton = new THREE.Skeleton(bones);
+      skinnedMesh.add(root);
+      skinnedMesh.bind(skeleton);
+
+      return {
+        mesh: skinnedMesh,
+        skeleton: skeleton,
+        bones: { root, spine, head, lArm, lForeArm, lHand, rArm, rForeArm, rHand, lThigh, lShin, rThigh, rShin }
+      };
     }
-
-    geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
-    geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
-    return geometry;
-  }
+  };
 
   // -----------------------------------------------------------------------
-  // 6. EXPORTADORES (.OBJ E .GLB COM ANIMAÇÕES)
+  // 7. CINEMÁTICA & ANIMAÇÕES EMBUTIDAS (ClayEngine.Anim)
+  // -----------------------------------------------------------------------
+  const Anim = {
+    // Caminhada Heroica Natural
+    bipedWalk(bones, time, speed = 4.6) {
+      const t = time * speed;
+      bones.root.position.set(0, 0.55 + Math.abs(Math.sin(t)) * 0.02, 0);
+      bones.root.rotation.set(0, Math.sin(t) * 0.04, Math.sin(t) * 0.015);
+      bones.spine.rotation.set(0.04, -Math.sin(t) * 0.04, 0);
+      bones.head.rotation.set(0, 0, 0);
+      bones.lThigh.rotation.set(Math.sin(t) * 0.50, 0, 0.02);
+      bones.lShin.rotation.set(Math.max(0, -Math.sin(t) * 0.65), 0, 0);
+      bones.rThigh.rotation.set(Math.sin(t + Math.PI) * 0.50, 0, -0.02);
+      bones.rShin.rotation.set(Math.max(0, -Math.sin(t + Math.PI) * 0.65), 0, 0);
+      bones.lArm.rotation.set(Math.sin(t + Math.PI) * 0.35, 0.0, -0.05);
+      bones.lForeArm.rotation.set(-0.25 + Math.sin(t + Math.PI) * 0.1, 0, 0);
+      bones.rArm.rotation.set(0.20 + Math.sin(t) * 0.08, 0.0, 0.06);
+      bones.rForeArm.rotation.set(-0.30, 0.0, 0);
+      bones.rHand.rotation.set(0.15, 0, 0);
+    },
+
+    // Corrida Veloz com Inclinação Atlética
+    bipedRun(bones, time, speed = 7.5) {
+      const t = time * speed;
+      bones.root.position.set(0, 0.53 + Math.abs(Math.sin(t)) * 0.045, 0);
+      bones.root.rotation.set(0, Math.sin(t) * 0.06, Math.sin(t) * 0.02);
+      bones.spine.rotation.set(0.28, -Math.sin(t) * 0.08, 0);
+      bones.head.rotation.set(-0.15, 0, 0);
+      bones.lThigh.rotation.set(Math.sin(t) * 0.85, 0, 0.02);
+      bones.lShin.rotation.set(Math.max(0, -Math.sin(t) * 1.25), 0, 0);
+      bones.rThigh.rotation.set(Math.sin(t + Math.PI) * 0.85, 0, -0.02);
+      bones.rShin.rotation.set(Math.max(0, -Math.sin(t + Math.PI) * 1.25), 0, 0);
+      bones.lArm.rotation.set(Math.sin(t + Math.PI) * 0.75, 0.0, -0.08);
+      bones.lForeArm.rotation.set(-0.55 + Math.sin(t + Math.PI) * 0.2, 0, 0);
+      bones.rArm.rotation.set(0.35 + Math.sin(t) * 0.40, 0.0, 0.08);
+      bones.rForeArm.rotation.set(-0.45, 0.0, 0);
+      bones.rHand.rotation.set(0.25, 0, 0);
+    }
+  };
+
+  // -----------------------------------------------------------------------
+  // 8. EXPORTADOR .OBJ
   // -----------------------------------------------------------------------
   function exportOBJ(geometry, filename = "model.obj") {
     const pos = geometry.attributes.position;
@@ -307,7 +447,7 @@
     const col = geometry.attributes.color;
     const index = geometry.index;
     
-    let obj = "# ClayEngine 3D Exported Mesh\n";
+    let obj = "# ClayEngine 3D Pro Exported Mesh\n";
     for (let i = 0; i < pos.count; i++) {
       const r = col ? col.getX(i).toFixed(3) : "0.5";
       const g = col ? col.getY(i).toFixed(3) : "0.5";
@@ -334,26 +474,23 @@
   }
 
   // -----------------------------------------------------------------------
-  // 7. API PÚBLICA DA CLAYENGINE v2.0.0
+  // 9. API PÚBLICA DA CLAYENGINE v3.0.0 PRO
   // -----------------------------------------------------------------------
   return {
-    version: "2.0.0",
+    version: "3.0.0 Pro",
     Math: MathOps,
-    Shapes: Shapes,
     Modifiers: Modifiers,
+    Anatomy: Anatomy,
+    Colors: Colors,
+    Rig: Rig,
+    Anim: Anim,
 
     // Criação de Geometria Estática
-    createMesh(sdfFunc, colorFunc, bounds, resolution = [52, 52, 52]) {
+    createMesh(sdfFunc, colorFunc, bounds, resolution = [46, 48, 46]) {
       return extractMesh(sdfFunc, colorFunc, bounds, resolution);
     },
 
-    // Criação de Geometria Rigged com Auto-Skinning Automático
-    createRiggedMesh(sdfFunc, colorFunc, bounds, boneList, resolution = [52, 52, 52]) {
-      const geo = extractMesh(sdfFunc, colorFunc, bounds, resolution);
-      return autoSkinGeometry(geo, boneList);
-    },
-
-    // Exportadores
+    // Exportador
     exportOBJ(geometry, filename) {
       exportOBJ(geometry, filename);
     }
