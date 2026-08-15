@@ -5,7 +5,7 @@
 Adicione no seu HTML:
 \`\`\`html
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/SEU_USUARIO/clay-engine@main/clay-engine.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/cavalomascaku-ui/clay-engine@main/clay-engine.js"></script>
 \`\`\`
 
 ## 💻 Exemplo Rápido
