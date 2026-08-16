@@ -1,0 +1,22 @@
+{
+  "name": "clay-engine",
+  "version": "3.6.0",
+  "description": "Micro-framework JavaScript para modelagem procedural com SDF no Three.js.",
+  "main": "clay-engine.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "three.js",
+    "sdf",
+    "procedural-modeling",
+    "3d"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "three": ">=0.128.0"
+  },
+  "devDependencies": {
+    "three": "^0.128.0"
+  }
+}
