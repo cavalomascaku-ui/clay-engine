@@ -1,7 +1,7 @@
 /**
  * =========================================================================
  *  ClayEngine 3D - Pro Procedural Modeling, Texturing & Animation Suite
- *  Versão: 3.5.0 (SDF, Anatomy, Auto-Rig, Procedural Textures & Materials)
+ *  Versão: 3.6.0 (SDF, Anatomy, Auto-Rig, Procedural Textures & Materials)
  *  Autor: cavalomascaku-ui
  * =========================================================================
  */
@@ -24,16 +24,32 @@
   // -----------------------------------------------------------------------
   // 1. MATEMÁTICA & OPERADORES VOLUMÉTRICOS (SDF)
   // -----------------------------------------------------------------------
+  function assertPositiveFinite(value, name) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new RangeError(`${name} deve ser um número finito maior que zero.`);
+    }
+    return value;
+  }
+
+  function assertPositiveInteger(value, name) {
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new RangeError(`${name} deve ser um inteiro maior que zero.`);
+    }
+    return value;
+  }
+
   const MathOps = {
     smin(a, b, k = 0.15) {
+      if (k <= 0) return Math.min(a, b);
       const h = Math.max(k - Math.abs(a - b), 0.0) / k;
       return Math.min(a, b) - h * h * k * 0.25;
     },
     smax(a, b, k = 0.05) {
-      const h = Math.max(k - Math.abs(-a - b), 0.0) / k;
-      return Math.max(-a, b) + h * h * k * 0.25;
+      if (k <= 0) return Math.max(a, b);
+      return -MathOps.smin(-a, -b, k);
     },
     sintersect(a, b, k = 0.05) {
+      if (k <= 0) return Math.max(a, b);
       const h = Math.max(k - Math.abs(a - b), 0.0) / k;
       return Math.max(a, b) + h * h * k * 0.25;
     },
@@ -44,38 +60,44 @@
     length2(x, y) { return Math.hypot(x, y); },
     clamp(v, min = 0, max = 1) { return Math.max(min, Math.min(max, v)); },
 
-    sphere(x, y, z, r) { return this.length3(x, y, z) - r; },
+    sphere(x, y, z, r) { return MathOps.length3(x, y, z) - r; },
     ellipsoid(x, y, z, rx, ry, rz) {
-      const k0 = this.length3(x / rx, y / ry, z / rz);
-      const k1 = this.length3(x / (rx * rx), y / (ry * ry), z / (rz * rz));
-      return k0 * (k0 - 1.0) / k1;
+      assertPositiveFinite(rx, 'rx');
+      assertPositiveFinite(ry, 'ry');
+      assertPositiveFinite(rz, 'rz');
+      const k0 = MathOps.length3(x / rx, y / ry, z / rz);
+      const k1 = MathOps.length3(x / (rx * rx), y / (ry * ry), z / (rz * rz));
+      return k1 === 0 ? -Math.min(rx, ry, rz) : k0 * (k0 - 1.0) / k1;
     },
     capsule(px, py, pz, ax, ay, az, bx, by, bz, r) {
       const pax = px - ax, pay = py - ay, paz = pz - az;
       const bax = bx - ax, bay = by - ay, baz = bz - az;
-      const h = this.clamp((pax * bax + pay * bay + paz * baz) / (bax * bax + bay * bay + baz * baz));
-      return this.length3(pax - bax * h, pay - bay * h, paz - baz * h) - r;
+      const l2 = bax * bax + bay * bay + baz * baz;
+      if (l2 === 0) return MathOps.length3(pax, pay, paz) - r;
+      const h = MathOps.clamp((pax * bax + pay * bay + paz * baz) / l2);
+      return MathOps.length3(pax - bax * h, pay - bay * h, paz - baz * h) - r;
     },
     roundCone(px, py, pz, ax, ay, az, bx, by, bz, r1, r2) {
       const bax = bx - ax, bay = by - ay, baz = bz - az;
       const l2 = bax * bax + bay * bay + baz * baz;
       const pax = px - ax, pay = py - ay, paz = pz - az;
+      if (l2 === 0) return MathOps.length3(pax, pay, paz) - Math.max(r1, r2);
       const y = (pax * bax + pay * bay + paz * baz) / l2;
-      const h = this.clamp(y);
+      const h = MathOps.clamp(y);
       const r = r1 * (1.0 - h) + r2 * h;
-      return this.length3(pax - bax * h, pay - bay * h, paz - baz * h) - r;
+      return MathOps.length3(pax - bax * h, pay - bay * h, paz - baz * h) - r;
     },
     box(x, y, z, bx, by, bz) {
       const qx = Math.abs(x) - bx, qy = Math.abs(y) - by, qz = Math.abs(z) - bz;
-      return this.length3(Math.max(qx, 0.0), Math.max(qy, 0.0), Math.max(qz, 0.0)) + Math.min(Math.max(qx, Math.max(qy, qz)), 0.0);
+      return MathOps.length3(Math.max(qx, 0.0), Math.max(qy, 0.0), Math.max(qz, 0.0)) + Math.min(Math.max(qx, Math.max(qy, qz)), 0.0);
     },
     cylinder(x, y, z, h, r) {
-      const dX = this.length2(x, z) - r, dY = Math.abs(y) - h;
-      return Math.min(Math.max(dX, dY), 0.0) + this.length2(Math.max(dX, 0.0), Math.max(dY, 0.0));
+      const dX = MathOps.length2(x, z) - r, dY = Math.abs(y) - h;
+      return Math.min(Math.max(dX, dY), 0.0) + MathOps.length2(Math.max(dX, 0.0), Math.max(dY, 0.0));
     },
     torus(x, y, z, tx, ty) {
-      const qx = this.length2(x, z) - tx;
-      return this.length2(qx, y) - ty;
+      const qx = MathOps.length2(x, z) - tx;
+      return MathOps.length2(qx, y) - ty;
     },
     symX(x) { return Math.abs(x); }
   };
@@ -97,6 +119,7 @@
       return { x: c * x - s * y, y: s * x + c * y, z: z };
     },
     radialRepeat(x, z, count = 6) {
+      assertPositiveInteger(count, 'count');
       const angle = (Math.PI * 2) / count;
       let a = Math.atan2(z, x) + angle * 0.5;
       const r = Math.hypot(x, z);
@@ -255,6 +278,7 @@
 
     // Textura de Listras (Canudos, roupas mágicas, doces)
     stripes(color1 = '#ffffff', color2 = '#dc2626', count = 10) {
+      assertPositiveInteger(count, 'count');
       const canvas = document.createElement('canvas');
       canvas.width = 256;
       canvas.height = 256;
@@ -271,6 +295,9 @@
 
     // Runas Mágicas / Kanjis Japoneses
     runes(symbols = ["滅", "死", "魂", "血"], glowColor = "#ff2244") {
+      if (!Array.isArray(symbols) || symbols.length === 0) {
+        throw new RangeError('symbols deve conter ao menos um símbolo.');
+      }
       const canvas = document.createElement('canvas');
       canvas.width = 256;
       canvas.height = 1024;
@@ -298,11 +325,12 @@
   // -----------------------------------------------------------------------
   const Materials = {
     clay(options = {}) {
+      const { roughness = 0.65, metalness = 0.05, ...rest } = options || {};
       return new THREE.MeshStandardMaterial({
         vertexColors: true,
-        roughness: options.roughness || 0.65,
-        metalness: options.metalness || 0.05,
-        ...options
+        roughness,
+        metalness,
+        ...rest
       });
     },
     glowing(color = 0xff3300, intensity = 1.5) {
@@ -358,8 +386,18 @@
   ];
 
   function extractMesh(sdfFunc, colorFunc, bounds, dims = [46, 48, 46]) {
-    const [nx, ny, nz] = dims;
+    if (typeof sdfFunc !== 'function') throw new TypeError('sdfFunc deve ser uma função.');
+    if (!bounds || !Object.values(bounds).every(Number.isFinite)) {
+      throw new TypeError('bounds deve conter minX, maxX, minY, maxY, minZ e maxZ finitos.');
+    }
     const { minX, maxX, minY, maxY, minZ, maxZ } = bounds;
+    if (!(maxX > minX && maxY > minY && maxZ > minZ)) {
+      throw new RangeError('Cada limite máximo deve ser maior que o limite mínimo correspondente.');
+    }
+    if (!Array.isArray(dims) || dims.length !== 3 || !dims.every((value) => Number.isInteger(value) && value >= 2)) {
+      throw new RangeError('resolution deve conter três inteiros maiores ou iguais a 2.');
+    }
+    const [nx, ny, nz] = dims;
     const stepX = (maxX - minX) / (nx - 1), stepY = (maxY - minY) / (ny - 1), stepZ = (maxZ - minZ) / (nz - 1);
 
     const grid = new Float32Array(nx * ny * nz);
@@ -378,8 +416,8 @@
     function getNormal(x, y, z) {
       const eps = 0.002;
       const dx = sdfFunc(x + eps, y, z) - sdfFunc(x - eps, y, z);
-      const dy = sdfFunc(x, y + eps, z) - sdfFunc(x - eps, y, z);
-      const dz = sdfFunc(x, y, z + eps) - sdfFunc(x - eps, y, z - eps);
+      const dy = sdfFunc(x, y + eps, z) - sdfFunc(x, y - eps, z);
+      const dz = sdfFunc(x, y, z + eps) - sdfFunc(x, y, z - eps);
       const len = Math.hypot(dx, dy, dz) || 1;
       return [dx / len, dy / len, dz / len];
     }
@@ -559,6 +597,9 @@
   };
 
   function exportOBJ(geometry, filename = "model.obj") {
+    if (!geometry || !geometry.attributes || !geometry.attributes.position) {
+      throw new TypeError('geometry deve conter um atributo position.');
+    }
     const pos = geometry.attributes.position, norm = geometry.attributes.normal, col = geometry.attributes.color, index = geometry.index;
     let obj = "# ClayEngine 3D Pro Exported Mesh\n";
     for (let i = 0; i < pos.count; i++) {
@@ -569,23 +610,37 @@
       for (let i = 0; i < norm.count; i++) obj += `vn ${norm.getX(i).toFixed(4)} ${norm.getY(i).toFixed(4)} ${norm.getZ(i).toFixed(4)}\n`;
     }
     if (index) {
-      for (let i = 0; i < index.count; i += 3) {
+      for (let i = 0; i + 2 < index.count; i += 3) {
         const a = index.getX(i) + 1, b = index.getX(i + 1) + 1, c = index.getX(i + 2) + 1;
         obj += `f ${a}//${a} ${b}//${b} ${c}//${c}\n`;
       }
+    } else {
+      for (let i = 0; i + 2 < pos.count; i += 3) {
+        const a = i + 1, b = i + 2, c = i + 3;
+        obj += `f ${a}//${a} ${b}//${b} ${c}//${c}\n`;
+      }
+    }
+    if (typeof document === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined') {
+      return obj;
     }
     const blob = new Blob([obj], { type: "text/plain" });
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
     link.download = filename;
     link.click();
+    if (typeof link.remove === 'function') link.remove();
+    if (typeof URL.revokeObjectURL === 'function') {
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    }
+    return obj;
   }
 
   // -----------------------------------------------------------------------
-  // 8. API PÚBLICA DA CLAYENGINE v3.5.0
+  // 8. API PÚBLICA DA CLAYENGINE v3.6.0
   // -----------------------------------------------------------------------
   return {
-    version: "3.5.0",
+    version: "3.6.0",
     Math: MathOps,
     Modifiers: Modifiers,
     Anatomy: Anatomy,
@@ -599,7 +654,7 @@
       return extractMesh(sdfFunc, colorFunc, bounds, resolution);
     },
     exportOBJ(geometry, filename) {
-      exportOBJ(geometry, filename);
+      return exportOBJ(geometry, filename);
     }
   };
 }));
